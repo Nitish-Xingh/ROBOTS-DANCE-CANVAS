@@ -16,7 +16,8 @@ CSS3 – minimal styling and layout
 
 🚀 Getting Started
 Clone this repository:
-git clone https://github.com/your-username/robots-dance-canvas.git
+git clone https://github.com/Nitish-Xingh/ROBOTS-DANCE-CANVAS.git
+
 
 
 Open robots_dance.html in your browser.
