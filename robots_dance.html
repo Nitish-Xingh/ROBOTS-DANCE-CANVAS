@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Robot Dance Canvas</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+    canvas {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <canvas></canvas>
+
+  <script>
+  "use strict";
+
+  // core robot dance logic
+  const roboExperience = noWorkers => {
+    const struct = {
+      points: [
+        { x: 0, y: -4, f(s,d){ this.y -= 0.01*s*ts; } },
+        { x: 0, y: -16, f(s,d){ this.y -= 0.02*s*d*ts; } },
+        { x: 0, y: 12, f(s,d){ this.y += 0.02*s*d*ts; } },
+        { x: -12, y: 0 }, { x: 12, y: 0 },
+        { x: -3, y: 34, f(s,d){ d>0?(this.x+=0.01*s*ts,this.y-=0.015*s*ts):this.y+=0.02*s*ts; } },
+        { x: 3, y: 34, f(s,d){ d>0?this.y+=0.02*s*ts:(this.x-=0.01*s*ts,this.y-=0.015*s*ts); } },
+        { x: -28, y: 0, f(s,d){ this.x+=this.vx*0.025*ts; this.y-=0.001*s*ts; } },
+        { x: 28, y: 0, f(s,d){ this.x+=this.vx*0.025*ts; this.y-=0.001*s*ts; } },
+        { x: -3, y: 64, f(s,d){ this.y+=0.015*s*ts; d>0?this.y-=0.01*s*ts:this.y+=0.05*s*ts; } },
+        { x: 3, y: 64, f(s,d){ this.y+=0.015*s*ts; d>0?this.y+=0.05*s*ts:this.y-=0.01*s*ts; } }
+      ],
+      links: [
+        {p0:3,p1:7,size:12,lum:0.5}, {p0:1,p1:3,size:24,lum:0.5},
+        {p0:1,p1:0,size:60,lum:0.5,disk:1}, {p0:5,p1:9,size:16,lum:0.5},
+        {p0:2,p1:5,size:32,lum:0.5}, {p0:1,p1:2,size:50,lum:1},
+        {p0:6,p1:10,size:16,lum:1.5}, {p0:2,p1:6,size:32,lum:1.5},
+        {p0:4,p1:8,size:12,lum:1.5}, {p0:1,p1:4,size:24,lum:1.5}
+      ]
+    };
+
+    class Robot {
+      constructor(color, light, size, x, y, struct){
+        this.x=x; this.size=size; this.color=Math.round(color); this.light=light;
+        this.points=[]; this.links=[]; this.frame=0; this.dir=1;
+        for(const p of struct.points) this.points.push(new Robot.Point(size*p.x+x,size*p.y+y,p.f));
+        for(const l of struct.links){
+          const p0=this.points[l.p0],p1=this.points[l.p1],dx=p0.x-p1.x,dy=p0.y-p1.y;
+          this.links.push(new Robot.Link(this,p0,p1,Math.sqrt(dx*dx+dy*dy),l.size*size/3,l.lum,l.force,l.disk));
+        }
+      }
+      update(){
+        if(++this.frame%Math.round(20/ts)===0) this.dir=-this.dir;
+        for(const link of this.links) link.update();
+        for(const p of this.points) p.update(this);
+        for(const l of this.links){
+          const p=l.p1;
+          if(p.y>canvas.height*ground-l.size*0.5){
+            p.y=canvas.height*ground-l.size*0.5; p.x-=p.vx; p.vx=p.vy=0;
+          }
+        }
+        this.points[3].x+=(this.x-this.points[3].x)*0.001;
+      }
+      draw(){
+        for(const l of this.links){
+          if(l.size){
+            const dx=l.p1.x-l.p0.x,dy=l.p1.y-l.p0.y,a=Math.atan2(dy,dx);
+            ctx.save(); ctx.translate(l.p0.x+l.size*0.25,l.p0.y+l.size*0.25); ctx.rotate(a);
+            ctx.drawImage(l.shadow,-l.size*0.5,-l.size*0.5); ctx.restore();
+            ctx.save(); ctx.translate(l.p0.x,l.p0.y); ctx.rotate(a);
+            ctx.drawImage(l.image,-l.size*0.5,-l.size*0.5); ctx.restore();
+          }
+        }
+      }
+    }
+
+    Robot.Link=class{
+      constructor(parent,p0,p1,dist,size,light,force,disk){
+        this.p0=p0;this.p1=p1;this.distance=dist;this.size=size;
+        this.light=light||1;this.force=force||0.5;
+        this.image=this.makeStroke(`hsl(${parent.color},30%,${parent.light*this.light}%)`,true,disk,dist,size);
+        this.shadow=this.makeStroke("rgba(0,0,0,0.5)",false,disk,dist,size);
+      }
+      update(){
+        const dx=this.p1.x-this.p0.x,dy=this.p1.y-this.p0.y,dist=Math.sqrt(dx*dx+dy*dy);
+        if(dist>0){const tw=this.p0.w+this.p1.w,r1=this.p1.w/tw,r0=this.p0.w/tw,dz=(this.distance-dist)*this.force;
+          const sx=dx/dist*dz,sy=dy/dist*dz; this.p1.x+=sx*r0;this.p1.y+=sy*r0;this.p0.x-=sx*r1;this.p0.y-=sy*r1;}
+      }
+      makeStroke(color,axis,disk,dist,size){
+        let img=noWorkers?document.createElement("canvas"):new OffscreenCanvas(dist+size,size);
+        img.width=dist+size; img.height=size;
+        const ict=img.getContext("2d");
+        ict.beginPath(); ict.lineCap="round"; ict.lineWidth=size; ict.strokeStyle=color;
+        if(disk){ ict.arc(size*0.5+dist,size*0.5,size*0.5,0,2*Math.PI); ict.fillStyle=color; ict.fill(); }
+        else{ ict.moveTo(size*0.5,size*0.5); ict.lineTo(size*0.5+dist,size*0.5); ict.stroke(); }
+        if(axis){const s=size/10; ict.fillStyle="#000";
+          ict.fillRect(size*0.5-s,size*0.5-s,s*2,s*2); ict.fillRect(size*0.5-s+dist,size*0.5-s,s*2,s*2);}
+        return img;
+      }
+    };
+
+    Robot.Point=class{
+      constructor(x,y,fn,w){this.x=x;this.y=y;this.w=w||0.5;this.fn=fn;this.px=x;this.py=y;this.vx=0;this.vy=0;}
+      update(r){ if(r!==pointer.drag){this.fn&&this.fn(16*Math.sqrt(r.size),r.dir);}
+        this.vx=this.x-this.px; this.vy=this.y-this.py; this.px=this.x; this.py=this.y;
+        this.vx*=0.995; this.vy*=0.995; this.x+=this.vx; this.y+=this.vy+0.01*ts; }
+    };
+
+    const bots=[]; let ground=1,canvas={width:0,height:0,resize:true},ctx=null,pointer={x:0,y:0,drag:null},ts=1,lastTime=0;
+
+    const message=e=>{
+      switch(e.data.msg){
+        case"start":canvas.elem=e.data.elem;canvas.width=canvas.elem.width;canvas.height=canvas.elem.height;
+          ctx=canvas.elem.getContext("2d");initBots();requestAnimationFrame(run);break;
+        case"resize":canvas.width=e.data.width;canvas.height=e.data.height;canvas.resize=true;break;
+        case"pointerMove":pointer.x=e.data.x;pointer.y=e.data.y;break;
+        case"pointerDown":pointer.x=e.data.x;pointer.y=e.data.y;break;
+        case"pointerUp":pointer.drag=null;break;
+      }
+    };
+
+    const resize=()=>{canvas.elem.width=canvas.width;canvas.elem.height=canvas.height;canvas.resize=false;ground=canvas.height>500?.85:1;
+      bots.forEach((b,i)=>b.x=(i+2)*canvas.width/9);};
+
+    const run=time=>{
+      requestAnimationFrame(run);
+      if(canvas.resize) resize();
+      if(lastTime!==0){const t=(time-lastTime)/16; ts+=(t-ts)*0.1; if(ts>1) ts=1;} lastTime=time;
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      ctx.fillStyle="#222"; ctx.fillRect(0,0,canvas.width,canvas.height*0.15);
+      ctx.fillRect(0,canvas.height*0.85,canvas.width,canvas.height*0.15);
+      for(const b of bots){b.update();b.draw();}
+    };
+
+    const initBots=()=>{ground=canvas.height>500?.85:1; for(let i=0;i<6;i++) bots.push(new Robot(i*360/7,80,Math.sqrt(Math.min(canvas.width,canvas.height))/6,(i+2)*canvas.width/9,canvas.height*0.5-100,struct));};
+
+    return noWorkers?{postMessage(data){message({data})}}:(onmessage=message);
+  };
+
+  // main
+  let worker=null;
+  const canvas=document.querySelector("canvas"); canvas.width=canvas.offsetWidth; canvas.height=canvas.offsetHeight;
+  if(window.Worker&&window.OffscreenCanvas){worker=new Worker(URL.createObjectURL(new Blob(["("+roboExperience+")()"])));const off=canvas.transferControlToOffscreen();
+    worker.postMessage({msg:"start",elem:off},[off]);}
+  else{worker=roboExperience(true); worker.postMessage({msg:"start",elem:canvas});}
+
+  window.addEventListener("resize",()=>worker.postMessage({msg:"resize",width:canvas.offsetWidth,height:canvas.offsetHeight}),false);
+  window.addEventListener("mousemove",e=>worker.postMessage({msg:"pointerMove",x:e.clientX,y:e.clientY}),false);
+  window.addEventListener("mousedown",e=>worker.postMessage({msg:"pointerDown",x:e.clientX,y:e.clientY}),false);
+  window.addEventListener("mouseup",()=>worker.postMessage({msg:"pointerUp"}),false);
+  </script>
+</body>
+</html>
