@@ -25,6 +25,7 @@ Watch the robots groove on your screen!
 
 📸 Preview
 
+https://github.com/user-attachments/assets/c0eef17d-4287-46d4-810f-d8b90bf4fe34
 
 
 📂 Use Cases
